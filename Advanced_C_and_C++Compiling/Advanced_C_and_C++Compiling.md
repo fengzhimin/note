@@ -125,5 +125,67 @@
 
 #### Dynamic Library Soname(Short for shared object name)
 - library soname = lib + "library name" + .so + "library major version digit(s)"
-- gcc -shared "list of object files" -Wl,-soname,libfoo.so.1 -o libfoo.so.1.0.0
-- 
+- The library soname is typically embedded by the linker into the dedicated ELF field of the library's binary file. The string specifying the library soname is typically passed to the linker through the dedicated linker flag, like so:
+- gcc -shared "list of object files" **-Wl,-soname,**libfoo.so.1 -o libfoo.so.1.0.0
+- readelf -d /dynamic-library-name
+
+#### Linux Build Time Library Location Rules Details
+- Break the complete library path into two parts: the folder path and the library filename.
+- Pass the folder path to the linker by appending it after the **-L** Linker flag.
+- Pass the library name(link name) only to linker by appending it after the **-l** flag.
+- gcc main.o **-L**../sharedLib **-l**workingdemo -o demo
+- In the cases when the gcc line combines compiling with linking, these linker flags should be prepended with the **-Wl**, flag, like so:
+- gcc -Wall -fPIC main.cpp **-Wl,-L**../sharedLib -**-Wl,-lworkingdemo** -o demo
+
+#### Beginners' Mistakes: What Can Possibly Go Wrong and How to Avoid It
+- The typicl problems happen to the impatient and inexperienced programmer in scearios dealing with dynamic libraries, when either of the following situations happend:
+	* The full path to a dynamic library is passed to the **-l** option(**-L** part being not used).
+	* The part of the path is passed through the **-L** option, and the rest of the path including the filename passed through the **-l** option.
+
+- The linker usually formally accepts these variations of specifying the build time library paths. In the case when the path to static libraries is provided, these kinds of "creative freedoms" do not cause problems down the road.However, when the path to the dynamic library is passed, the problems introduced by deviating from the truly correct way of passing the library path start showing up at runtime.
+- gcc main.o -l/home/milan/mylibs/case_a/libmilan.so -o demo
+
+### Runtime Dynamic Library Location Rules
+#### Linux Runtime Dynamic Library Location Rules
+##### Preloaded Libraries
+- The unquestionable highest priority above any library search is reserved for the libraries specified for preloading, as the loader first loads these libraries.
+	* By setting the **LD_PRELOAD** environment variable.
+	  export **LD_PRELOAD**=/home/milan/project/libs/libmilan.so:**$LD_PRELOAD**
+    * Through the **/etc/ld.so.preload** file.
+
+##### rpath
+![rpath](./rpath.png)
+
+##### ldconfig Cache
+- Running the ldconfig utility is usually one of the last steps during the standard package installation procedure, which typically requires passing the path to a folder containing libraries as input argument. The result is that ldconfig inserts the specified folder path to the list of dynamic library search folders maintained in the /etc/ld.so.conf file. At the same token, the newly added folder path is scanned for dynamic libraries, the result of which is that the filenames of found libraries get added to the list of libraries’ filenames maintained in the /etc/ld.so.cache file.
+
+##### The Default Library Paths(/lib and /usr/lib)
+- The paths /lib and /usr/lib are the two default locations where Linux OS keeps its dynamic libraries. The third party programs designed to be used with superuser privileges and/or to be available to all users typically deploy their dynamic library into one of these two places. Please notice that the path /usr/local/lib does not belong to this category.
+
+##### Priority Scheme Summary
+- When RUNPATH field is specified (i.e. DT_RUNPATH is non-empty)
+	* LD_LIBRARY_PATH
+	* runpath (DT_RUNPATH field)
+	* ld.so.cache
+	* default library paths (/lib and /usr/lib)
+
+- In the absence of RUNPATH (i.e. DT_RUNPATH is empty string)
+	* RPATH of the loaded binary, followed by the RPATH of the binary, which loads it all the way up to either the executable or the dynamic library which loads all of them
+	* LD_LIBRARY_PATH
+	* ld.so.cache
+	* default library paths (/lib and /usr/lib)
+
+#### Windows Runtime Dynamic Library Location Rules
+- The very same path in which the application binary file resides
+- One of the system DLL folders (such as C:\Windows\System or C:\Windows\System32)
+
+## Designing Dynamic Libraries:Advanced Topics
+- A crucial factor in this process is the memory mapping concept, Basically, it allows a dynamic library that is already loaded in the memory map of a running process to be mapped into the memory map of another process running concurrently.
+- The important rule of dynamic linking is that different processes do share the code segment of the dynamic library, but do not share the data segments.Each of the processes loading the dynamic library is expected to provide its own copy of the data on which the dynamic library code operates (i.e., the library’s data segment).
+
+### Why Resolved Memory Addresses Are a Must
+- Certain groups of instructions expect that the address of the operand in memory be know at runtime,In general, the following two groups of instructions strictly require the precisely calculated addresses:
+	* Data access instructions(mov, etc)require the address of the operand in memory.
+	* Subrouting calls(call, jmp,etc)require the address of function in code segment.
+
+## Handling Duplicate Symbols When Linking In Dynamic Libraries
